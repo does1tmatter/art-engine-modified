@@ -3,8 +3,8 @@ const overrides = {
     'Face': 'Old Face',
     'Background': 'Blue',
     'Body': 'Green',
-    'Clothing': 'Camo',
-    // 'Prop': 'Backpack',
+    'Clothing': 'Santa',
+    'Prop': 'Backpack',
   },
 }
 

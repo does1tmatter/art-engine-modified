@@ -5,9 +5,8 @@ const { IMAGE_LAYERS_GENERATOR_INTERFACE_V1 } = require('@hashlips-lab/art-engin
 const { ITEM_ATTRIBUTES_GENERATOR_INTERFACE_V1 } = require('@hashlips-lab/art-engine/dist/interfaces/generators/ItemAttributesGeneratorInterface')
 const { EDGE_CASE_UID_SEPARATOR } = require('@hashlips-lab/art-engine/dist/plugins/inputs/ImageLayersInput')
 const { overrides } = require('../../config.js')
-console.log(overrides)
 
-const randomize = (min, max) => Math.round(Math.random() * (max - min) + min)
+const randomize = (rmg, min, max) => Math.round(rmg.random() * (max - min) + min)
 
 class ImageLayersAttributesGenerator {
   inputsManager;
@@ -30,8 +29,6 @@ class ImageLayersAttributesGenerator {
     this.callback = constructorProps.randomization.onRender
     this.idRange = constructorProps.randomization.idRange
     this.idSet = constructorProps.randomization.idSet
-    this.cacheSeed = constructorProps.randomization.currentSeed
-    this.idMap = constructorProps.randomization.idMap
 
     if (this.endIndex < this.startIndex || this.startIndex + this.endIndex < 1) {
       throw new Error(
@@ -62,25 +59,23 @@ class ImageLayersAttributesGenerator {
       let overrideNotif = false
 
       let newId = uid
+      newId = randomize(this.rmg, ...this.idRange)
 
-      if (this.mainSeed != this.cacheSeed?.seed) {
-        newId = randomize(...this.idRange)
-      
-        if (this.idSet.has(newId)) {
-          while (this.idSet.has(newId)) {
-            newId = randomize(...this.idRange)
-          }
+      if (this.idSet.has(newId)) {
+        while (this.idSet.has(newId)) {
+          newId = randomize(this.rmg, ...this.idRange)
         }
-
-        this.callback(this.idSet, this.idMap, newId)
-      } else {
-        newId = this.cacheSeed.ids[uid]
       }
+
+      this.callback(this.idSet, newId)
 
       // Compute attributes
       for (let layer of Object.values(this.data.layers)) {
         if (overrides[newId]) {
-          itemAttributes[layer.name] = overrides[newId][layer.name] ?? null
+          if (overrides[newId][layer.name]) {
+            itemAttributes[layer.name] = overrides[newId][layer.name]
+          }
+          
           if (!overrideNotif) {
             console.log(`Token #${newId} overriden.`)
             overrideNotif = true
