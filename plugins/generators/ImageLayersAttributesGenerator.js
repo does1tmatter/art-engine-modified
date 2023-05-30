@@ -4,6 +4,8 @@ const RandomSeed = require('random-seed')
 const { IMAGE_LAYERS_GENERATOR_INTERFACE_V1 } = require('@hashlips-lab/art-engine/dist/interfaces/generators/ImageLayersGeneratorInterface')
 const { ITEM_ATTRIBUTES_GENERATOR_INTERFACE_V1 } = require('@hashlips-lab/art-engine/dist/interfaces/generators/ItemAttributesGeneratorInterface')
 const { EDGE_CASE_UID_SEPARATOR } = require('@hashlips-lab/art-engine/dist/plugins/inputs/ImageLayersInput')
+const { overrides } = require('../../config.js')
+console.log(overrides)
 
 const randomize = (min, max) => Math.round(Math.random() * (max - min) + min)
 
@@ -57,55 +59,7 @@ class ImageLayersAttributesGenerator {
     while (uid <= this.endIndex) {
       const itemAttributes = {};
       let itemAssets = [];
-
-      // Compute attributes
-      for (let layer of Object.values(this.data.layers)) {
-        itemAttributes[layer.name] = this.selectRandomItemByWeight(layer.options);
-      }
-
-      // Compute DNA
-      const itemDna = this.calculateDna(itemAttributes);
-
-      if (dnas.has(itemDna)) {
-        console.log(`Duplicate DNA entry, generating one more...`);
-
-        continue;
-      }
-
-      dnas.add(itemDna);
-
-      // Compute assets
-      for (const attributeName of Object.keys(itemAttributes)) {
-        const layer = this.data.layers[attributeName];
-        const option = layer.options[itemAttributes[attributeName]];
-        let assets = [];
-
-        for (const edgeCaseUid of Object.keys(option.edgeCases)) {
-          const [matchingTrait, matchingValue] = edgeCaseUid.split(
-            EDGE_CASE_UID_SEPARATOR
-          );
-
-          if (matchingValue === itemAttributes[matchingTrait]) {
-            assets = assets.concat(option.edgeCases[edgeCaseUid].assets);
-
-            break;
-          }
-        }
-
-        if (assets.length === 0) {
-          assets = assets.concat(option.assets);
-        }
-
-        itemAssets = itemAssets.concat(
-          assets.map((asset) => ({
-            path: path.join(this.data.basePath, asset.path),
-            latestModifiedTimestamp: asset.lastModifiedTime,
-            xOffset: layer.baseXOffset + asset.relativeXOffset,
-            yOffset: layer.baseYOffset + asset.relativeYOffset,
-            zOffset: layer.baseZOffset + asset.relativeZOffset,
-          }))
-        );
-      }
+      let overrideNotif = false
 
       let newId = uid
 
@@ -121,6 +75,75 @@ class ImageLayersAttributesGenerator {
         this.callback(this.idSet, this.idMap, newId)
       } else {
         newId = this.cacheSeed.ids[uid]
+      }
+
+      // Compute attributes
+      for (let layer of Object.values(this.data.layers)) {
+        if (overrides[newId]) {
+          itemAttributes[layer.name] = overrides[newId][layer.name] ?? null
+          if (!overrideNotif) {
+            console.log(`Token #${newId} overriden.`)
+            overrideNotif = true
+          }
+        } else {
+          itemAttributes[layer.name] = this.selectRandomItemByWeight(layer.options);
+        }
+      }
+
+      // Compute DNA
+      let itemDna = this.calculateDna(itemAttributes);
+
+      if (dnas.has(itemDna) && !overrides[newId]) {
+        console.log(`Duplicate DNA entry, generating one more...`);
+
+        while (dnas.has(itemDna)) {
+          // Regenerate new attributes while dna exist
+          for (let layer of Object.values(this.data.layers)) {
+            itemAttributes[layer.name] = this.selectRandomItemByWeight(layer.options);
+          }
+
+          // compute new dna
+          itemDna = this.calculateDna(itemAttributes);
+        }
+      }
+
+      dnas.add(itemDna);
+
+      // Compute assets
+      for (const attributeName of Object.keys(itemAttributes)) {
+        const layer = this.data.layers[attributeName];
+        const option = layer.options[itemAttributes[attributeName]];
+        let assets = [];
+        
+        if (option?.edgeCases) {
+          for (const edgeCaseUid of Object.keys(option.edgeCases)) {
+            const [matchingTrait, matchingValue] = edgeCaseUid.split(
+              EDGE_CASE_UID_SEPARATOR
+            );
+  
+            if (matchingValue === itemAttributes[matchingTrait]) {
+              assets = assets.concat(option.edgeCases[edgeCaseUid].assets);
+  
+              break;
+            }
+          }
+        }
+        
+        if (option?.assets) {
+          if (assets.length === 0) {
+            assets = assets.concat(option.assets);
+          }
+  
+          itemAssets = itemAssets.concat(
+            assets.map((asset) => ({
+              path: path.join(this.data.basePath, asset.path),
+              latestModifiedTimestamp: asset.lastModifiedTime,
+              xOffset: layer.baseXOffset + asset.relativeXOffset,
+              yOffset: layer.baseYOffset + asset.relativeYOffset,
+              zOffset: layer.baseZOffset + asset.relativeZOffset,
+            }))
+          );
+        }
       }
 
       items[newId.toString()] = [
